@@ -10,11 +10,12 @@ import {
   KindleBooksResponse,
   ReviewRecord
 } from './api.models';
+import { environment } from '../../../environments/environment';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = 'http://localhost:8010/api';
+  private readonly baseUrl = environment.apiBaseUrl;
 
   uploadPdf(file: File, bookTitle?: string, author?: string, bookSize?: string, category?: string, amazonUrl?: string) {
     const formData = new FormData();

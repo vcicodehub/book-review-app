@@ -221,16 +221,6 @@ public class DocumentService {
     }
 
     private void deleteDocumentImages(Long documentId) {
-        documentImageRepository.findByDocumentId(documentId).forEach(image -> {
-            try {
-                Path path = Path.of(image.filePath());
-                if (Files.exists(path)) {
-                    Files.delete(path);
-                }
-            } catch (IOException ignored) {
-                // Best effort cleanup
-            }
-        });
         documentImageRepository.deleteByDocumentId(documentId);
     }
 

@@ -20,11 +20,13 @@ public class DocumentRepository {
     }
 
     public Long insert(DocumentRecord document) {
-        jdbcTemplate.update(
+        return jdbcTemplate.queryForObject(
                 """
                 insert into documents (file_name, original_file_name, book_title, author, book_size, category, pdf_path, summary, created_at, amazon_url)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?::timestamptz, ?)
+                returning id
                 """,
+                Long.class,
                 document.fileName(),
                 document.originalFileName(),
                 document.bookTitle(),
@@ -36,20 +38,18 @@ public class DocumentRepository {
                 document.createdAt(),
                 document.amazonUrl()
         );
-
-        return jdbcTemplate.queryForObject("select last_insert_rowid()", Long.class);
     }
 
     public List<DocumentRecord> findAll() {
         return jdbcTemplate.query(
-                "select id, file_name, original_file_name, book_title, author, book_size, category, pdf_path, summary, created_at, amazon_url from documents order by id desc",
+                "select id, file_name, original_file_name, book_title, author, book_size, category, pdf_path, summary, created_at::text, amazon_url from documents order by id desc",
                 this::mapRow
         );
     }
 
     public Optional<DocumentRecord> findById(Long id) {
         List<DocumentRecord> results = jdbcTemplate.query(
-                "select id, file_name, original_file_name, book_title, author, book_size, category, pdf_path, summary, created_at, amazon_url from documents where id = ?",
+                "select id, file_name, original_file_name, book_title, author, book_size, category, pdf_path, summary, created_at::text, amazon_url from documents where id = ?",
                 this::mapRow,
                 id
         );

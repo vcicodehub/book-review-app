@@ -21,7 +21,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.List;
 
 @RestController
@@ -91,9 +90,9 @@ public class DocumentController {
         if (!record.documentId().equals(documentId)) {
             throw new IllegalArgumentException("Image does not belong to this document.");
         }
-        byte[] bytes = Files.readAllBytes(java.nio.file.Path.of(record.filePath()));
+        byte[] bytes = documentImageService.getImageBytes(imageId);
 
-        String contentType = getContentType(record.originalFileName());
+        String contentType = record.contentType() != null ? record.contentType() : getContentType(record.originalFileName());
         Resource resource = new ByteArrayResource(bytes);
 
         return ResponseEntity.ok()

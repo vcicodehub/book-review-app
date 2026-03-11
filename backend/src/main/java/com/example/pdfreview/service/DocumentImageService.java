@@ -5,17 +5,17 @@ import com.example.pdfreview.model.DocumentImageRecord;
 import com.example.pdfreview.model.DocumentRecord;
 import com.example.pdfreview.repository.DocumentImageRepository;
 import com.example.pdfreview.repository.DocumentRepository;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.datasource.DataSourceUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.sql.DataSource;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.sql.Connection;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 @Service
 public class DocumentImageService {
@@ -30,18 +30,19 @@ public class DocumentImageService {
 
     private final DocumentRepository documentRepository;
     private final DocumentImageRepository documentImageRepository;
-    private final Path imagesBaseDir;
+    private final DataSource dataSource;
 
     public DocumentImageService(
             DocumentRepository documentRepository,
             DocumentImageRepository documentImageRepository,
-            @Value("${app.storage.upload-dir}") String uploadDir
+            DataSource dataSource
     ) {
         this.documentRepository = documentRepository;
         this.documentImageRepository = documentImageRepository;
-        this.imagesBaseDir = Path.of(uploadDir).resolve("images");
+        this.dataSource = dataSource;
     }
 
+    @Transactional
     public DocumentImageResponse uploadImage(Long documentId, MultipartFile file) {
         DocumentRecord document = documentRepository.findById(documentId)
                 .orElseThrow(() -> new IllegalArgumentException("Document not found for id " + documentId));
@@ -59,19 +60,15 @@ public class DocumentImageService {
             throw new IllegalArgumentException("Invalid image type. Allowed: JPEG, PNG, GIF, WebP.");
         }
 
-        String extension = getExtension(contentType, file.getOriginalFilename());
-        String storedFileName = UUID.randomUUID() + extension;
-        Path documentDir = imagesBaseDir.resolve(documentId.toString());
-
         try {
-            Files.createDirectories(documentDir);
-            Path destination = documentDir.resolve(storedFileName);
-            file.transferTo(destination);
+            byte[] bytes = file.getBytes();
+            long oid = createLargeObject(bytes);
 
             String createdAt = OffsetDateTime.now().toString();
             Long id = documentImageRepository.insert(
                     documentId,
-                    destination.toString(),
+                    oid,
+                    contentType,
                     file.getOriginalFilename(),
                     createdAt
             );
@@ -101,60 +98,100 @@ public class DocumentImageService {
         }
 
         documentImageRepository.deleteById(imageId);
-
-        try {
-            Path path = Path.of(image.filePath());
-            if (Files.exists(path)) {
-                Files.delete(path);
-            }
-        } catch (IOException ignored) {
-            // Best effort cleanup
-        }
     }
 
     public Optional<DocumentImageRecord> getImageRecord(Long imageId) {
         return documentImageRepository.findById(imageId);
     }
 
-    public List<Path> getImagePathsForDocument(Long documentId) {
-        return documentImageRepository.findByDocumentId(documentId).stream()
-                .map(r -> Path.of(r.filePath()))
-                .filter(Files::exists)
-                .toList();
+    public byte[] getImageBytes(Long imageId) throws IOException {
+        DocumentImageRecord record = documentImageRepository.findById(imageId)
+                .orElseThrow(() -> new IllegalArgumentException("Image not found for id " + imageId));
+
+        return readLargeObject(record.largeObjectOid());
+    }
+
+    public List<DocumentImageRecord> getImageRecordsForDocument(Long documentId) {
+        return documentImageRepository.findByDocumentId(documentId);
+    }
+
+    /**
+     * Returns image content for all images of a document, for use by AI review generation.
+     */
+    public List<ImageData> getImageDataForDocument(Long documentId) throws IOException {
+        List<DocumentImageRecord> records = documentImageRepository.findByDocumentId(documentId);
+        List<ImageData> result = new java.util.ArrayList<>();
+        for (DocumentImageRecord r : records) {
+            byte[] bytes = readLargeObject(r.largeObjectOid());
+            String contentType = r.contentType() != null ? r.contentType() : "image/jpeg";
+            result.add(new ImageData(bytes, contentType));
+        }
+        return result;
     }
 
     public void deleteImagesForDocument(Long documentId) {
-        List<DocumentImageRecord> images = documentImageRepository.findByDocumentId(documentId);
-        for (DocumentImageRecord image : images) {
-            try {
-                Path path = Path.of(image.filePath());
-                if (Files.exists(path)) {
-                    Files.delete(path);
-                }
-            } catch (IOException ignored) {
-                // Best effort cleanup
-            }
-        }
         documentImageRepository.deleteByDocumentId(documentId);
     }
 
-    private String getExtension(String contentType, String originalFilename) {
-        if (contentType != null) {
-            return switch (contentType.toLowerCase()) {
-                case "image/jpeg", "image/jpg" -> ".jpg";
-                case "image/png" -> ".png";
-                case "image/gif" -> ".gif";
-                case "image/webp" -> ".webp";
-                default -> ".jpg";
-            };
-        }
-        if (originalFilename != null && originalFilename.contains(".")) {
-            String ext = originalFilename.substring(originalFilename.lastIndexOf('.'));
-            if (ext.matches("^\\.(jpg|jpeg|png|gif|webp)$")) {
-                return ext;
+    /**
+     * Creates a PostgreSQL large object from bytes. Must be called within a transaction.
+     */
+    private long createLargeObject(byte[] bytes) throws IOException {
+        Connection conn = null;
+        try {
+            conn = DataSourceUtils.getConnection(dataSource);
+            conn.setAutoCommit(false);
+
+            var pgConn = conn.unwrap(org.postgresql.PGConnection.class);
+            var lobj = pgConn.getLargeObjectAPI();
+            long oid = lobj.createLO(org.postgresql.largeobject.LargeObjectManager.READWRITE);
+            var largeObj = lobj.open(oid, org.postgresql.largeobject.LargeObjectManager.WRITE);
+            try {
+                largeObj.write(bytes);
+            } finally {
+                largeObj.close();
+            }
+            return oid;
+        } catch (Exception e) {
+            throw new IOException("Failed to create large object", e);
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.setAutoCommit(true);
+                } catch (Exception ignored) {
+                }
+                DataSourceUtils.releaseConnection(conn, dataSource);
             }
         }
-        return ".jpg";
+    }
+
+    private byte[] readLargeObject(long oid) throws IOException {
+        Connection conn = null;
+        try {
+            conn = DataSourceUtils.getConnection(dataSource);
+            conn.setAutoCommit(false);
+
+            var pgConn = conn.unwrap(org.postgresql.PGConnection.class);
+            var lobj = pgConn.getLargeObjectAPI();
+            var largeObj = lobj.open(oid, org.postgresql.largeobject.LargeObjectManager.READ);
+            try {
+                byte[] buf = new byte[largeObj.size()];
+                largeObj.read(buf, 0, buf.length);
+                return buf;
+            } finally {
+                largeObj.close();
+            }
+        } catch (Exception e) {
+            throw new IOException("Failed to read large object " + oid, e);
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.setAutoCommit(true);
+                } catch (Exception ignored) {
+                }
+                DataSourceUtils.releaseConnection(conn, dataSource);
+            }
+        }
     }
 
     private DocumentImageResponse toResponse(DocumentImageRecord r) {

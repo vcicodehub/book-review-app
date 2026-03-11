@@ -7,8 +7,10 @@ spring:
       max-file-size: 25MB
       max-request-size: 25MB
   datasource:
-    driver-class-name: org.sqlite.JDBC
-    url: jdbc:sqlite:./data/pdf-review-app.db
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:15432}/${POSTGRES_DB:pdf_review}
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:postgres}
   sql:
     init:
       mode: always

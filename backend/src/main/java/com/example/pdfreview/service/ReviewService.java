@@ -9,7 +9,7 @@ import com.example.pdfreview.repository.DocumentRepository;
 import com.example.pdfreview.repository.ReviewRepository;
 import org.springframework.stereotype.Service;
 
-import java.nio.file.Path;
+import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.util.List;
 
@@ -36,8 +36,13 @@ public class ReviewService {
                 ? request.summary()
                 : document.summary();
 
-        List<Path> imagePaths = documentImageService.getImagePathsForDocument(request.documentId());
-        return aiService.generateReview(summary, request.starRating(), request.tone(), document.category(), request.notes(), imagePaths);
+        List<ImageData> imageData;
+        try {
+            imageData = documentImageService.getImageDataForDocument(request.documentId());
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read document images", e);
+        }
+        return aiService.generateReview(summary, request.starRating(), request.tone(), document.category(), request.notes(), imageData);
     }
 
     public GenerateReviewResponse shorten(ShortenReviewRequest request) {

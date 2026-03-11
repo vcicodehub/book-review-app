@@ -1,5 +1,8 @@
+-- PostgreSQL schema for PDF AI Review app
+-- Images are stored as PostgreSQL large objects (OID references)
+
 create table if not exists documents (
-  id integer primary key autoincrement,
+  id bigserial primary key,
   file_name text not null,
   original_file_name text,
   book_title text,
@@ -8,32 +11,32 @@ create table if not exists documents (
   category text,
   pdf_path text not null,
   summary text not null,
-  created_at text not null,
+  created_at timestamptz not null,
   amazon_url text
 );
 
 create table if not exists reviews (
-  id integer primary key autoincrement,
-  document_id integer not null unique,
+  id bigserial primary key,
+  document_id bigint not null unique references documents(id) on delete cascade,
   star_rating integer not null,
   tone text,
   review_title text,
   review_body text not null,
   notes_for_ai text,
-  posted integer not null default 0,
-  posted_at text,
-  reminder_sent_at text,
-  created_at text not null,
-  updated_at text not null,
-  foreign key(document_id) references documents(id)
+  posted boolean not null default false,
+  posted_at timestamptz,
+  reminder_sent_at timestamptz,
+  created_at timestamptz not null,
+  updated_at timestamptz not null
 );
 
 create table if not exists document_images (
-  id integer primary key autoincrement,
-  document_id integer not null,
-  file_path text not null,
+  id bigserial primary key,
+  document_id bigint not null references documents(id) on delete cascade,
+  large_object_oid oid not null,
+  content_type varchar(100) not null default 'image/jpeg',
   original_file_name text,
-  created_at text not null,
-  foreign key(document_id) references documents(id)
+  created_at timestamptz not null
 );
 
+create index if not exists idx_document_images_document_id on document_images(document_id);

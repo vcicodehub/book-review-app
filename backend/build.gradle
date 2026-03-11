@@ -32,6 +32,7 @@ dependencies {
     implementation 'org.apache.pdfbox:pdfbox:3.0.5'
     implementation 'org.apache.tika:tika-core:3.0.0'
     implementation 'org.apache.tika:tika-parsers-standard-package:3.0.0'
+    implementation 'org.postgresql:postgresql:42.7.4'
     implementation 'org.xerial:sqlite-jdbc:3.50.3.0'
     implementation 'org.jsoup:jsoup:1.18.1'
 
@@ -41,4 +42,11 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+tasks.register('runMigration', JavaExec) {
+    group = 'application'
+    description = 'Migrate data from SQLite to PostgreSQL'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.example.pdfreview.migration.SqliteToPostgresMigration'
 }

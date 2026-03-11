@@ -3,7 +3,7 @@
 A local-first monorepo containing:
 
 - `frontend/` — Angular standalone app with Tailwind CSS
-- `backend/` — Java Spring Boot app using Gradle and SQLite
+- `backend/` — Java Spring Boot app using Gradle and PostgreSQL
 
 ## What this app does
 
@@ -13,7 +13,7 @@ A local-first monorepo containing:
 4. View the summary in the browser
 5. Generate an Amazon review draft from the summary
 6. Edit the review and choose the star rating
-7. Save the result to a local SQLite database file on your laptop
+7. Save the result to a PostgreSQL database
 
 ## Monorepo layout
 
@@ -40,7 +40,7 @@ pdf-ai-review-monorepo/
 - Spring Web
 - Spring JDBC
 - Apache PDFBox
-- SQLite
+- PostgreSQL (images stored as large objects)
 
 ## Prerequisites
 
@@ -48,6 +48,81 @@ pdf-ai-review-monorepo/
 - npm 10+
 - Java 21+
 - Gradle 8.14+ or 9.x
+- PostgreSQL 14+
+
+## Database setup
+
+Create a PostgreSQL database:
+
+```sql
+CREATE DATABASE pdf_review;
+```
+
+The backend connects using these environment variables (defaults shown):
+
+```bash
+export POSTGRES_HOST=localhost
+export POSTGRES_PORT=5432
+export POSTGRES_DB=pdf_review
+export POSTGRES_USER=postgres
+export POSTGRES_PASSWORD=postgres
+```
+
+On Windows (PowerShell):
+
+```powershell
+$env:POSTGRES_HOST = "localhost"
+$env:POSTGRES_DB = "pdf_review"
+$env:POSTGRES_USER = "postgres"
+$env:POSTGRES_PASSWORD = "postgres"
+```
+
+The schema is created automatically on first run. Images are stored as PostgreSQL large objects (LOBs).
+
+## Migrating from SQLite
+
+If you have existing data in a SQLite database, run the migration tool.
+
+**Windows (Command Prompt):**
+
+```cmd
+cd backend
+set POSTGRES_URL=jdbc:postgresql://localhost:5432/pdf_review
+set POSTGRES_USER=noorluca
+set POSTGRES_PASSWORD=superSecurePasswordHere
+set SQLITE_DB_PATH=.\data\pdf-review-app.db
+gradle runMigration
+```
+
+**Windows (PowerShell):**
+
+```powershell
+cd backend
+$env:POSTGRES_URL = "jdbc:postgresql://localhost:5432/pdf_review"
+$env:POSTGRES_USER = "postgres"
+$env:POSTGRES_PASSWORD = "postgres"
+$env:SQLITE_DB_PATH = ".\data\pdf-review-app.db"
+gradle runMigration
+```
+
+**macOS/Linux:**
+
+```bash
+cd backend
+export POSTGRES_URL=jdbc:postgresql://localhost:5432/pdf_review
+export POSTGRES_USER=postgres
+export POSTGRES_PASSWORD=postgres
+export SQLITE_DB_PATH=./data/pdf-review-app.db
+gradle runMigration
+```
+
+The migration will:
+
+1. Copy all documents and reviews to PostgreSQL
+2. Read image files from disk and store them as PostgreSQL large objects
+3. Preserve IDs and relationships
+
+**Note:** Run the backend once with PostgreSQL first so the schema exists. The migration truncates existing PostgreSQL tables before importing.
 
 ## Environment variables
 
@@ -107,19 +182,11 @@ npm start
 
 The frontend starts on `http://localhost:4200`.
 
-## Database file
+## Storage
 
-The backend stores data in:
-
-```text
-backend/data/pdf-review-app.db
-```
-
-Uploaded files are stored in:
-
-```text
-backend/data/uploads/
-```
+- **Database:** PostgreSQL (documents, reviews, document metadata)
+- **Images:** Stored in PostgreSQL as large objects (no separate image files)
+- **PDFs:** `backend/data/uploads/` (PDF files remain on disk)
 
 ## API overview
 
@@ -129,6 +196,8 @@ backend/data/uploads/
 - `GET /api/documents`
 - `GET /api/documents/{id}`
 - `DELETE /api/documents/{id}`
+- `POST /api/documents/{id}/images` — upload image for Kindle document
+- `GET /api/documents/{documentId}/images/{imageId}` — serve image
 - `POST /api/reviews/generate`
 - `POST /api/reviews/shorten`
 - `POST /api/reviews/humanize`
@@ -140,4 +209,5 @@ backend/data/uploads/
 
 - API keys stay on the backend only.
 - The backend truncates extracted PDF text before sending it to the AI provider.
-- SQLite keeps everything local in a file-based database.
+- PostgreSQL stores all structured data and images (as large objects).
+

@@ -40,31 +40,32 @@ public class ReviewRepository {
     public ReviewRecord save(ReviewRecord review) {
         String now = OffsetDateTime.now().toString();
         if (review.id() == null) {
-            jdbcTemplate.update(
+            Long id = jdbcTemplate.queryForObject(
                     """
                     insert into reviews (document_id, star_rating, tone, review_title, review_body, notes_for_ai, posted, posted_at, reminder_sent_at, created_at, updated_at)
-                    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    values (?, ?, ?, ?, ?, ?, ?, ?::timestamptz, ?::timestamptz, ?::timestamptz, ?::timestamptz)
+                    returning id
                     """,
+                    Long.class,
                     review.documentId(),
                     review.starRating(),
                     review.tone(),
                     review.reviewTitle(),
                     review.reviewBody(),
                     review.notesForAi(),
-                    Boolean.TRUE.equals(review.posted()) ? 1 : 0,
+                    Boolean.TRUE.equals(review.posted()),
                     review.postedAt(),
                     review.reminderSentAt(),
                     now,
                     now
             );
-            Long id = jdbcTemplate.queryForObject("select last_insert_rowid()", Long.class);
             return findById(id).orElseThrow();
         }
 
         jdbcTemplate.update(
                 """
                 update reviews
-                set star_rating = ?, tone = ?, review_title = ?, review_body = ?, notes_for_ai = ?, posted = ?, posted_at = ?, reminder_sent_at = ?, updated_at = ?
+                set star_rating = ?, tone = ?, review_title = ?, review_body = ?, notes_for_ai = ?, posted = ?, posted_at = ?::timestamptz, reminder_sent_at = ?::timestamptz, updated_at = ?::timestamptz
                 where id = ?
                 """,
                 review.starRating(),
@@ -72,7 +73,7 @@ public class ReviewRepository {
                 review.reviewTitle(),
                 review.reviewBody(),
                 review.notesForAi(),
-                Boolean.TRUE.equals(review.posted()) ? 1 : 0,
+                Boolean.TRUE.equals(review.posted()),
                 review.postedAt(),
                 review.reminderSentAt(),
                 now,
@@ -90,11 +91,11 @@ public class ReviewRepository {
                 rs.getString("review_title"),
                 rs.getString("review_body"),
                 rs.getString("notes_for_ai"),
-                rs.getInt("posted") != 0,
-                rs.getString("posted_at"),
-                rs.getString("reminder_sent_at"),
-                rs.getString("created_at"),
-                rs.getString("updated_at")
+                rs.getBoolean("posted"),
+                rs.getObject("posted_at") != null ? rs.getTimestamp("posted_at").toInstant().toString() : null,
+                rs.getObject("reminder_sent_at") != null ? rs.getTimestamp("reminder_sent_at").toInstant().toString() : null,
+                rs.getObject("created_at") != null ? rs.getTimestamp("created_at").toInstant().toString() : null,
+                rs.getObject("updated_at") != null ? rs.getTimestamp("updated_at").toInstant().toString() : null
         );
     }
 
@@ -103,17 +104,17 @@ public class ReviewRepository {
                 """
                 select id, document_id, star_rating, tone, review_title, review_body, notes_for_ai, posted, posted_at, reminder_sent_at, created_at, updated_at
                 from reviews
-                where posted = 0 and reminder_sent_at is null
-                and datetime(created_at) <= datetime('now', ?)
+                where posted = false and reminder_sent_at is null
+                and created_at <= now() - make_interval(days => ?)
                 """,
                 this::mapRow,
-                "-" + days + " days"
+                days
         );
     }
 
     public void markReminderSent(Long reviewId) {
         jdbcTemplate.update(
-                "update reviews set reminder_sent_at = ? where id = ?",
+                "update reviews set reminder_sent_at = ?::timestamptz where id = ?",
                 OffsetDateTime.now().toString(),
                 reviewId
         );

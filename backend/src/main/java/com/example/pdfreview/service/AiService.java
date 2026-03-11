@@ -9,8 +9,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
@@ -56,14 +54,14 @@ public class AiService {
         return generateReview(summary, starRating, tone, category, notes, List.of());
     }
 
-    public GenerateReviewResponse generateReview(String summary, int starRating, String tone, String category, String notes, List<Path> imagePaths) {
+    public GenerateReviewResponse generateReview(String summary, int starRating, String tone, String category, String notes, List<ImageData> imageData) {
         String normalizedTone = StringUtils.hasText(tone) ? tone.trim() : "balanced";
         String categoryGuidance = getCategoryGuidance(category);
         String notesSection = StringUtils.hasText(notes)
                 ? "\n\nThe reader provided these notes about the book. Incorporate these points into the review:\n\n" + notes.trim() + "\n\n"
                 : "";
 
-        String imageGuidance = !imagePaths.isEmpty()
+        String imageGuidance = !imageData.isEmpty()
                 ? "\n\nThe user has also shared screenshots or images related to the book (e.g. Kindle highlights, passages, or illustrations). Use the content visible in these images to enrich the review with specific details, quotes, or observations.\n\n"
                 : "";
 
@@ -82,10 +80,10 @@ public class AiService {
                 """.formatted(starRating, normalizedTone, categoryGuidance, imageGuidance, summary, notesSection);
 
         String raw;
-        if (imagePaths.isEmpty()) {
+        if (imageData.isEmpty()) {
             raw = callTextModel(prompt).trim();
         } else {
-            raw = callVisionModel(prompt, imagePaths).trim();
+            raw = callVisionModel(prompt, imageData).trim();
         }
         return parseJsonFallback(raw, starRating);
     }
@@ -142,7 +140,7 @@ public class AiService {
         return parseJsonFallback(raw, 4);
     }
 
-    private String callVisionModel(String prompt, List<Path> imagePaths) {
+    private String callVisionModel(String prompt, List<ImageData> imageData) {
         if (!StringUtils.hasText(apiKey)) {
             throw new IllegalStateException("OPENAI_API_KEY is not configured.");
         }
@@ -150,22 +148,17 @@ public class AiService {
         List<Object> content = new ArrayList<>();
         content.add(Map.of("type", "text", "text", prompt));
 
-        for (Path path : imagePaths) {
-            try {
-                byte[] bytes = Files.readAllBytes(path);
-                String base64 = Base64.getEncoder().encodeToString(bytes);
-                String mimeType = Files.probeContentType(path);
-                if (mimeType == null || !mimeType.startsWith("image/")) {
-                    mimeType = "image/jpeg";
-                }
-                String dataUrl = "data:" + mimeType + ";base64," + base64;
-                content.add(Map.of(
-                        "type", "image_url",
-                        "image_url", Map.of("url", dataUrl)
-                ));
-            } catch (Exception e) {
-                throw new IllegalStateException("Failed to read image: " + path, e);
+        for (ImageData img : imageData) {
+            String base64 = Base64.getEncoder().encodeToString(img.content());
+            String mimeType = img.contentType();
+            if (mimeType == null || !mimeType.startsWith("image/")) {
+                mimeType = "image/jpeg";
             }
+            String dataUrl = "data:" + mimeType + ";base64," + base64;
+            content.add(Map.of(
+                    "type", "image_url",
+                    "image_url", Map.of("url", dataUrl)
+            ));
         }
 
         Map<String, Object> payload = new HashMap<>();

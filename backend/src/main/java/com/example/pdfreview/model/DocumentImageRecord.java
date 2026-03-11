@@ -3,7 +3,8 @@ package com.example.pdfreview.model;
 public record DocumentImageRecord(
         Long id,
         Long documentId,
-        String filePath,
+        Long largeObjectOid,
+        String contentType,
         String originalFileName,
         String createdAt
 ) {

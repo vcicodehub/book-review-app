@@ -20,40 +20,22 @@ public class SchemaMigration {
 
     @EventListener(ApplicationReadyEvent.class)
     public void migrate() {
-        addColumnIfMissing("reviews", "posted", "integer not null default 0");
-        addColumnIfMissing("reviews", "posted_at", "text");
-        addColumnIfMissing("reviews", "reminder_sent_at", "text");
+        addColumnIfMissing("reviews", "posted", "boolean not null default false");
+        addColumnIfMissing("reviews", "posted_at", "timestamptz");
+        addColumnIfMissing("reviews", "reminder_sent_at", "timestamptz");
         addColumnIfMissing("reviews", "notes_for_ai", "text");
         addColumnIfMissing("documents", "category", "text");
         addColumnIfMissing("documents", "book_size", "text");
         addColumnIfMissing("documents", "amazon_url", "text");
-        createDocumentImagesTableIfMissing();
-    }
-
-    private void createDocumentImagesTableIfMissing() {
-        try {
-            jdbcTemplate.execute("""
-                create table if not exists document_images (
-                  id integer primary key autoincrement,
-                  document_id integer not null,
-                  file_path text not null,
-                  original_file_name text,
-                  created_at text not null,
-                  foreign key(document_id) references documents(id)
-                )
-                """);
-            log.info("Created document_images table if it did not exist");
-        } catch (Exception e) {
-            log.warn("Could not create document_images table: {}", e.getMessage());
-        }
     }
 
     private void addColumnIfMissing(String table, String column, String definition) {
         try {
-            jdbcTemplate.execute("alter table %s add column %s %s".formatted(table, column, definition));
+            jdbcTemplate.execute("ALTER TABLE %s ADD COLUMN %s %s".formatted(table, column, definition));
             log.info("Added column {}.{}", table, column);
         } catch (Exception e) {
-            if (e.getMessage() != null && e.getMessage().contains("duplicate column name")) {
+            String msg = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
+            if (msg.contains("already exists") || msg.contains("duplicate column")) {
                 log.debug("Column {}.{} already exists", table, column);
             } else {
                 throw e;
