@@ -1,0 +1,129 @@
+package com.example.pdfreview.repository;
+
+import com.example.pdfreview.model.ReviewRecord;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Repository;
+
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public class ReviewRepository {
+
+    private final JdbcTemplate jdbcTemplate;
+
+    public ReviewRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    public Optional<ReviewRecord> findByDocumentId(Long documentId) {
+        List<ReviewRecord> results = jdbcTemplate.query(
+                "select id, document_id, star_rating, tone, review_title, review_body, notes_for_ai, posted, posted_at, reminder_sent_at, created_at, updated_at from reviews where document_id = ?",
+                this::mapRow,
+                documentId
+        );
+        return results.stream().findFirst();
+    }
+
+    public Optional<ReviewRecord> findById(Long id) {
+        List<ReviewRecord> results = jdbcTemplate.query(
+                "select id, document_id, star_rating, tone, review_title, review_body, notes_for_ai, posted, posted_at, reminder_sent_at, created_at, updated_at from reviews where id = ?",
+                this::mapRow,
+                id
+        );
+        return results.stream().findFirst();
+    }
+
+    public ReviewRecord save(ReviewRecord review) {
+        String now = OffsetDateTime.now().toString();
+        if (review.id() == null) {
+            jdbcTemplate.update(
+                    """
+                    insert into reviews (document_id, star_rating, tone, review_title, review_body, notes_for_ai, posted, posted_at, reminder_sent_at, created_at, updated_at)
+                    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    review.documentId(),
+                    review.starRating(),
+                    review.tone(),
+                    review.reviewTitle(),
+                    review.reviewBody(),
+                    review.notesForAi(),
+                    Boolean.TRUE.equals(review.posted()) ? 1 : 0,
+                    review.postedAt(),
+                    review.reminderSentAt(),
+                    now,
+                    now
+            );
+            Long id = jdbcTemplate.queryForObject("select last_insert_rowid()", Long.class);
+            return findById(id).orElseThrow();
+        }
+
+        jdbcTemplate.update(
+                """
+                update reviews
+                set star_rating = ?, tone = ?, review_title = ?, review_body = ?, notes_for_ai = ?, posted = ?, posted_at = ?, reminder_sent_at = ?, updated_at = ?
+                where id = ?
+                """,
+                review.starRating(),
+                review.tone(),
+                review.reviewTitle(),
+                review.reviewBody(),
+                review.notesForAi(),
+                Boolean.TRUE.equals(review.posted()) ? 1 : 0,
+                review.postedAt(),
+                review.reminderSentAt(),
+                now,
+                review.id()
+        );
+        return findById(review.id()).orElseThrow();
+    }
+
+    private ReviewRecord mapRow(ResultSet rs, int rowNum) throws SQLException {
+        return new ReviewRecord(
+                rs.getLong("id"),
+                rs.getLong("document_id"),
+                rs.getInt("star_rating"),
+                rs.getString("tone"),
+                rs.getString("review_title"),
+                rs.getString("review_body"),
+                rs.getString("notes_for_ai"),
+                rs.getInt("posted") != 0,
+                rs.getString("posted_at"),
+                rs.getString("reminder_sent_at"),
+                rs.getString("created_at"),
+                rs.getString("updated_at")
+        );
+    }
+
+    public List<ReviewRecord> findUnpostedOlderThanDays(int days) {
+        return jdbcTemplate.query(
+                """
+                select id, document_id, star_rating, tone, review_title, review_body, notes_for_ai, posted, posted_at, reminder_sent_at, created_at, updated_at
+                from reviews
+                where posted = 0 and reminder_sent_at is null
+                and datetime(created_at) <= datetime('now', ?)
+                """,
+                this::mapRow,
+                "-" + days + " days"
+        );
+    }
+
+    public void markReminderSent(Long reviewId) {
+        jdbcTemplate.update(
+                "update reviews set reminder_sent_at = ? where id = ?",
+                OffsetDateTime.now().toString(),
+                reviewId
+        );
+    }
+
+    public void deleteById(Long id) {
+        jdbcTemplate.update("delete from reviews where id = ?", id);
+    }
+
+    public void deleteByDocumentId(Long documentId) {
+        jdbcTemplate.update("delete from reviews where document_id = ?", documentId);
+    }
+}

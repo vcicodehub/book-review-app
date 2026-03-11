@@ -1,0 +1,41 @@
+server:
+  port: 8010
+
+spring:
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 25MB
+  datasource:
+    driver-class-name: org.sqlite.JDBC
+    url: jdbc:sqlite:./data/pdf-review-app.db
+  sql:
+    init:
+      mode: always
+  mail:
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SMTP_AUTH:true}
+          starttls:
+            enable: ${SMTP_STARTTLS:true}
+
+app:
+  reminder:
+    enabled: ${REMINDER_ENABLED:false}
+    recipient: ${REMINDER_RECIPIENT:}
+    cron: ${REMINDER_CRON:0 0 9 * * ?}
+  storage:
+    base-dir: ./data
+    upload-dir: ./data/uploads
+  kindle:
+    content-path: ${KINDLE_CONTENT_PATH:}
+  ai:
+    base-url: ${AI_BASE_URL:https://api.openai.com}
+    api-key: ${OPENAI_API_KEY:}
+    model: ${AI_MODEL:gpt-4o-mini}
+    summary-max-chars: 20000
