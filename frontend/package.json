@@ -5,6 +5,7 @@
   "scripts": {
     "start": "ng serve",
     "build": "ng build",
+    "build:prod": "ng build --configuration=production",
     "test": "ng test"
   },
   "dependencies": {
