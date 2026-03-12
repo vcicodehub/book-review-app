@@ -51,5 +51,4 @@ jobs:
           script: |
             set -euo pipefail
             cd /opt/book-review
-            chmod +x deploy-frontend.sh
             ./deploy-frontend.sh
