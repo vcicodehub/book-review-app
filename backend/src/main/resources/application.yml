@@ -8,9 +8,9 @@ spring:
       max-request-size: 25MB
   datasource:
     driver-class-name: org.postgresql.Driver
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:15432}/${POSTGRES_DB:pdf_review}
-    username: ${POSTGRES_USER:postgres}
-    password: ${POSTGRES_PASSWORD:postgres}
+    url: ${BOOK_REVIEW_DB_URL:jdbc:postgresql://postgres:15432/ript90}
+    username: ${POSTGRES_USER:noorluca}
+    password: ${POSTGRES_PASSWORD:superSecurePasswordHere}
   sql:
     init:
       mode: always
