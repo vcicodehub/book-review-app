@@ -8,6 +8,7 @@ import com.example.pdfreview.repository.DocumentRepository;
 import org.springframework.jdbc.datasource.DataSourceUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.sql.DataSource;
@@ -138,9 +139,12 @@ public class DocumentImageService {
      */
     private long createLargeObject(byte[] bytes) throws IOException {
         Connection conn = null;
+        boolean ownTransaction = !TransactionSynchronizationManager.isActualTransactionActive();
         try {
             conn = DataSourceUtils.getConnection(dataSource);
-            conn.setAutoCommit(false);
+            if (ownTransaction) {
+                conn.setAutoCommit(false);
+            }
 
             var pgConn = conn.unwrap(org.postgresql.PGConnection.class);
             var lobj = pgConn.getLargeObjectAPI();
@@ -157,7 +161,9 @@ public class DocumentImageService {
         } finally {
             if (conn != null) {
                 try {
-                    conn.setAutoCommit(true);
+                    if (ownTransaction) {
+                        conn.setAutoCommit(true);
+                    }
                 } catch (Exception ignored) {
                 }
                 DataSourceUtils.releaseConnection(conn, dataSource);
@@ -167,9 +173,12 @@ public class DocumentImageService {
 
     private byte[] readLargeObject(long oid) throws IOException {
         Connection conn = null;
+        boolean ownTransaction = !TransactionSynchronizationManager.isActualTransactionActive();
         try {
             conn = DataSourceUtils.getConnection(dataSource);
-            conn.setAutoCommit(false);
+            if (ownTransaction) {
+                conn.setAutoCommit(false);
+            }
 
             var pgConn = conn.unwrap(org.postgresql.PGConnection.class);
             var lobj = pgConn.getLargeObjectAPI();
@@ -186,7 +195,9 @@ public class DocumentImageService {
         } finally {
             if (conn != null) {
                 try {
-                    conn.setAutoCommit(true);
+                    if (ownTransaction) {
+                        conn.setAutoCommit(true);
+                    }
                 } catch (Exception ignored) {
                 }
                 DataSourceUtils.releaseConnection(conn, dataSource);
